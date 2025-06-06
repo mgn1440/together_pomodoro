@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visual Timer Test</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            text-align: center;
+        }
+        .circular-timer-container {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            margin: 0 auto 20px;
+        }
+        #circularTimer {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .timer-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Circular Timer Test</h2>
+        <div class="circular-timer-container">
+            <canvas id="circularTimer" width="250" height="250"></canvas>
+            <div class="timer-display" id="timerDisplay">25:00</div>
+        </div>
+        <div>
+            <button onclick="startTimer()">Start</button>
+            <button onclick="pauseTimer()">Pause</button>
+            <button onclick="resetTimer()">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('circularTimer');
+        const ctx = canvas.getContext('2d');
+        const timerDisplay = document.getElementById('timerDisplay');
+        
+        let timer = {
+            duration: 25 * 60,
+            remaining: 25 * 60,
+            isRunning: false
+        };
+        
+        let interval = null;
+        
+        function drawCircularTimer() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = 100;
+            const lineWidth = 12;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate progress (remaining time ratio)
+            const progress = timer.remaining / timer.duration;
+            const endAngle = -Math.PI / 2 + (progress * 2 * Math.PI);
+            
+            // Draw background circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+            
+            // Draw progress arc (starts full and decreases)
+            if (progress > 0) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, -Math.PI / 2, endAngle);
+                ctx.strokeStyle = '#e74c3c';
+                ctx.lineWidth = lineWidth;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+            
+            // Update display
+            const minutes = Math.floor(timer.remaining / 60);
+            const seconds = timer.remaining % 60;
+            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        function startTimer() {
+            if (!timer.isRunning) {
+                timer.isRunning = true;
+                interval = setInterval(() => {
+                    if (timer.remaining > 0) {
+                        timer.remaining--;
+                        drawCircularTimer();
+                    } else {
+                        pauseTimer();
+                        alert('Timer completed!');
+                    }
+                }, 1000);
+            }
+        }
+        
+        function pauseTimer() {
+            timer.isRunning = false;
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        }
+        
+        function resetTimer() {
+            pauseTimer();
+            timer.remaining = timer.duration;
+            drawCircularTimer();
+        }
+        
+        // Initial draw
+        drawCircularTimer();
+    </script>
+</body>
+</html>

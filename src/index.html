@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative Pomodoro Timer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Login/Session Screen -->
+        <div id="loginScreen" class="screen active">
+            <div class="logo">
+                <div class="timer-icon">
+                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                        <path d="M9 2h6M12 2v3"/>
+                    </svg>
+                </div>
+                <h1>Collaborative Pomodoro</h1>
+            </div>
+            
+            <div class="login-form">
+                <input type="text" id="username" placeholder="Enter your name" maxlength="20">
+                
+                <div class="session-options">
+                    <button id="createSessionBtn" class="primary-btn">Create New Session</button>
+                    
+                    <div class="divider">OR</div>
+                    
+                    <div class="join-session">
+                        <input type="text" id="sessionCode" placeholder="Session Code" maxlength="6">
+                        <button id="joinSessionBtn" class="secondary-btn">Join Session</button>
+                    </div>
+                </div>
+                
+                <div id="loginError" class="error-message"></div>
+            </div>
+        </div>
+
+        <!-- Timer Screen -->
+        <div id="timerScreen" class="screen">
+            <div class="header">
+                <div class="session-info">
+                    <span class="session-code">Session: <strong id="sessionCodeDisplay"></strong></span>
+                    <button id="leaveSessionBtn" class="icon-btn" title="Leave Session">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="header-controls">
+                    <button id="statsBtn" class="icon-btn" title="Statistics">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 20V10M12 20V4M6 20v-6"/>
+                        </svg>
+                    </button>
+                    <button id="settingsBtn" class="icon-btn" title="Settings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M12 1v6M12 17v6M20.5 7.5L15.5 10.5M8.5 13.5L3.5 16.5M20.5 16.5L15.5 13.5M8.5 10.5L3.5 7.5"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="timer-container">
+                <div class="session-type" id="sessionType">Work Session</div>
+                <div class="circular-timer-container">
+                    <canvas id="circularTimer" width="250" height="250"></canvas>
+                    <div class="timer-display" id="timerDisplay">25:00</div>
+                </div>
+                <div class="cycle-indicator" id="cycleIndicator">
+                    <span class="cycle-dot active"></span>
+                    <span class="cycle-dot"></span>
+                    <span class="cycle-dot"></span>
+                    <span class="cycle-dot"></span>
+                </div>
+            </div>
+
+            <div class="controls" id="timerControls">
+                <button id="startBtn" class="control-btn start">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </button>
+                <button id="pauseBtn" class="control-btn pause" style="display: none;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16"/>
+                        <rect x="14" y="4" width="4" height="16"/>
+                    </svg>
+                </button>
+                <button id="resetBtn" class="control-btn reset">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M1 4v6h6M23 20v-6h-6"/>
+                        <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="host-indicator" id="hostIndicator" style="display: none;">
+                You are the session host
+            </div>
+
+            <div class="users-container">
+                <h3>Participants</h3>
+                <div class="users-list" id="usersList"></div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button class="close-btn" id="closeSettingsBtn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h3>Timer Durations</h3>
+                        <div class="setting-item">
+                            <label for="workDuration">Work Session (minutes)</label>
+                            <input type="number" id="workDuration" min="1" max="60" value="25">
+                        </div>
+                        <div class="setting-item">
+                            <label for="shortBreakDuration">Short Break (minutes)</label>
+                            <input type="number" id="shortBreakDuration" min="1" max="30" value="5">
+                        </div>
+                        <div class="setting-item">
+                            <label for="longBreakDuration">Long Break (minutes)</label>
+                            <input type="number" id="longBreakDuration" min="1" max="60" value="15">
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Preferences</h3>
+                        <div class="setting-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="alwaysOnTop">
+                                Always on top
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="notificationSound" checked>
+                                Notification sounds
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label for="theme">Theme</label>
+                            <select id="theme">
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button id="saveSettingsBtn" class="primary-btn">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Modal -->
+        <div id="statsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Session Statistics</h2>
+                    <button class="close-btn" id="closeStatsBtn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="stats-section">
+                        <h3>Today's Progress</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="todayWorkSessions">0</div>
+                                <div class="stat-label">Work Sessions</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="todayFocusTime">0m</div>
+                                <div class="stat-label">Focus Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="todayBreakTime">0m</div>
+                                <div class="stat-label">Break Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="currentStreak">0</div>
+                                <div class="stat-label">Current Streak</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-section">
+                        <h3>All Time</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="totalWorkSessions">0</div>
+                                <div class="stat-label">Total Sessions</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="totalFocusTime">0h</div>
+                                <div class="stat-label">Total Focus Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="longestStreak">0</div>
+                                <div class="stat-label">Longest Streak</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="averageDaily">0</div>
+                                <div class="stat-label">Avg Daily Sessions</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-section">
+                        <h3>Current Session</h3>
+                        <div id="currentSessionStats">
+                            <div class="session-stat">
+                                <span>Participants: </span>
+                                <span id="sessionParticipants">1</span>
+                            </div>
+                            <div class="session-stat">
+                                <span>Session Duration: </span>
+                                <span id="sessionDuration">0m</span>
+                            </div>
+                            <div class="session-stat">
+                                <span>Cycles Completed: </span>
+                                <span id="sessionCycles">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="resetStatsBtn" class="secondary-btn">Reset Statistics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="notificationSound" preload="auto">
+        <source src="../assets/sounds/notification.mp3" type="audio/mpeg">
+        <source src="../assets/sounds/notification.ogg" type="audio/ogg">
+    </audio>
+
+    <script src="https://cdn.socket.io/4.6.2/socket.io.min.js"></script>
+    <script src="renderer.js"></script>
+</body>
+</html>
