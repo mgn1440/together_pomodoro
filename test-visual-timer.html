@@ -81,7 +81,9 @@
             
             // Calculate progress (remaining time ratio)
             const progress = timer.remaining / timer.duration;
-            const endAngle = -Math.PI / 2 + (progress * 2 * Math.PI);
+            // For clockwise countdown: start at top and go clockwise
+            const startAngle = -Math.PI / 2; // Top of circle (12 o'clock)
+            const endAngle = startAngle + (1 - progress) * 2 * Math.PI; // Clockwise from top
             
             // Draw background circle
             ctx.beginPath();
@@ -90,10 +92,11 @@
             ctx.lineWidth = lineWidth;
             ctx.stroke();
             
-            // Draw progress arc (starts full and decreases)
+            // Draw progress arc (starts full and decreases clockwise)
             if (progress > 0) {
                 ctx.beginPath();
-                ctx.arc(centerX, centerY, radius, -Math.PI / 2, endAngle);
+                // Draw from the elapsed position back to start (creates remaining time arc)
+                ctx.arc(centerX, centerY, radius, endAngle, startAngle + 2 * Math.PI);
                 ctx.strokeStyle = '#e74c3c';
                 ctx.lineWidth = lineWidth;
                 ctx.lineCap = 'round';

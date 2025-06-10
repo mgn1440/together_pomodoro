@@ -602,3 +602,42 @@ button, input, select {
     0%, 100% { transform: translate(-50%, -50%) scale(1); }
     50% { transform: translate(-50%, -50%) scale(1.1); }
 }
+
+/* Connection Status */
+.connection-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: 600;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.connection-status.connected {
+    background: var(--success-color);
+    color: white;
+}
+
+.connection-status.connecting {
+    background: #f39c12;
+    color: white;
+    animation: pulse-status 1.5s infinite;
+}
+
+.connection-status.disconnected {
+    background: var(--primary-color);
+    color: white;
+}
+
+.connection-status.error {
+    background: #c0392b;
+    color: white;
+}
+
+@keyframes pulse-status {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}

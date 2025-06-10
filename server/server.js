@@ -7,7 +7,11 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 const PORT = process.env.PORT || 3456;
@@ -127,60 +131,143 @@ class PomodoroSession {
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+  
+  // Handle reconnection
+  socket.on('reconnectSession', ({ sessionId, userId, username }, callback) => {
+    try {
+      const session = sessions.get(sessionId);
+      
+      if (!session) {
+        callback({ success: false, error: 'Session no longer exists' });
+        return;
+      }
+      
+      // Update user's socket ID
+      const user = session.users.get(userId);
+      if (user) {
+        user.socketId = socket.id;
+        socket.join(sessionId);
+        socket.data = { sessionId, userId, username };
+        
+        callback({
+          success: true,
+          sessionId,
+          userId,
+          isHost: session.hostId === userId,
+          session: {
+            users: Array.from(session.users.values()),
+            timer: session.timer
+          }
+        });
+      } else {
+        // User was removed, rejoin as new user
+        session.addUser(userId, username, socket.id);
+        socket.join(sessionId);
+        socket.data = { sessionId, userId, username };
+        
+        callback({
+          success: true,
+          sessionId,
+          userId,
+          isHost: false,
+          session: {
+            users: Array.from(session.users.values()),
+            timer: session.timer
+          }
+        });
+        
+        io.to(sessionId).emit('userJoined', {
+          user: session.users.get(userId),
+          users: Array.from(session.users.values())
+        });
+      }
+    } catch (error) {
+      console.error('Error reconnecting to session:', error);
+      callback({ success: false, error: 'Failed to reconnect' });
+    }
+  });
 
   socket.on('createSession', (username, callback) => {
-    const sessionId = uuidv4().substring(0, 6).toUpperCase();
-    const userId = uuidv4();
-    const session = new PomodoroSession(sessionId, userId);
-    
-    session.addUser(userId, username, socket.id);
-    sessions.set(sessionId, session);
-    
-    socket.join(sessionId);
-    callback({
-      success: true,
-      sessionId,
-      userId,
-      isHost: true,
-      session: {
-        users: Array.from(session.users.values()),
-        timer: session.timer
+    try {
+      if (!username || typeof username !== 'string') {
+        callback({ success: false, error: 'Invalid username' });
+        return;
       }
-    });
-    
-    io.to(sessionId).emit('userJoined', {
-      user: session.users.get(userId),
-      users: Array.from(session.users.values())
-    });
+      
+      const sessionId = uuidv4().substring(0, 6).toUpperCase();
+      const userId = uuidv4();
+      const session = new PomodoroSession(sessionId, userId);
+      
+      session.addUser(userId, username, socket.id);
+      sessions.set(sessionId, session);
+      
+      socket.join(sessionId);
+      socket.data = { sessionId, userId, username }; // Store user data in socket
+      
+      callback({
+        success: true,
+        sessionId,
+        userId,
+        isHost: true,
+        session: {
+          users: Array.from(session.users.values()),
+          timer: session.timer
+        }
+      });
+      
+      io.to(sessionId).emit('userJoined', {
+        user: session.users.get(userId),
+        users: Array.from(session.users.values())
+      });
+    } catch (error) {
+      console.error('Error creating session:', error);
+      callback({ success: false, error: 'Failed to create session' });
+    }
   });
 
   socket.on('joinSession', (sessionId, username, callback) => {
-    const session = sessions.get(sessionId);
-    
-    if (!session) {
-      callback({ success: false, error: 'Session not found' });
-      return;
-    }
-    
-    const userId = uuidv4();
-    session.addUser(userId, username, socket.id);
-    socket.join(sessionId);
-    
-    callback({
-      success: true,
-      sessionId,
-      userId,
-      isHost: false,
-      session: {
-        users: Array.from(session.users.values()),
-        timer: session.timer
+    try {
+      if (!username || typeof username !== 'string') {
+        callback({ success: false, error: 'Invalid username' });
+        return;
       }
-    });
-    
-    io.to(sessionId).emit('userJoined', {
-      user: session.users.get(userId),
-      users: Array.from(session.users.values())
-    });
+      
+      if (!sessionId || typeof sessionId !== 'string') {
+        callback({ success: false, error: 'Invalid session code' });
+        return;
+      }
+      
+      const session = sessions.get(sessionId);
+      
+      if (!session) {
+        callback({ success: false, error: 'Session not found' });
+        return;
+      }
+      
+      const userId = uuidv4();
+      session.addUser(userId, username, socket.id);
+      socket.join(sessionId);
+      socket.data = { sessionId, userId, username }; // Store user data in socket
+      
+      callback({
+        success: true,
+        sessionId,
+        userId,
+        isHost: false,
+        session: {
+          users: Array.from(session.users.values()),
+          timer: session.timer
+        }
+      });
+      
+      io.to(sessionId).emit('userJoined', {
+        user: session.users.get(userId),
+        users: Array.from(session.users.values())
+      });
+    } catch (error) {
+      console.error('Error joining session:', error);
+      callback({ success: false, error: 'Failed to join session' });
+    }
   });
 
   socket.on('startTimer', (sessionId, userId) => {
@@ -236,22 +323,42 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     
-    // Find and remove user from any sessions
-    for (const [sessionId, session] of sessions) {
-      for (const [userId, user] of session.users) {
-        if (user.socketId === socket.id) {
-          const shouldDelete = session.removeUser(userId);
-          
-          if (shouldDelete) {
-            sessions.delete(sessionId);
-          } else {
-            io.to(sessionId).emit('userLeft', {
-              userId,
-              users: Array.from(session.users.values()),
-              newHostId: session.hostId
-            });
+    // Use stored socket data for faster lookup
+    if (socket.data && socket.data.sessionId && socket.data.userId) {
+      const { sessionId, userId } = socket.data;
+      const session = sessions.get(sessionId);
+      
+      if (session) {
+        const shouldDelete = session.removeUser(userId);
+        
+        if (shouldDelete) {
+          sessions.delete(sessionId);
+        } else {
+          io.to(sessionId).emit('userLeft', {
+            userId,
+            users: Array.from(session.users.values()),
+            newHostId: session.hostId
+          });
+        }
+      }
+    } else {
+      // Fallback to original method if socket data not available
+      for (const [sessionId, session] of sessions) {
+        for (const [userId, user] of session.users) {
+          if (user.socketId === socket.id) {
+            const shouldDelete = session.removeUser(userId);
+            
+            if (shouldDelete) {
+              sessions.delete(sessionId);
+            } else {
+              io.to(sessionId).emit('userLeft', {
+                userId,
+                users: Array.from(session.users.values()),
+                newHostId: session.hostId
+              });
+            }
+            break;
           }
-          break;
         }
       }
     }

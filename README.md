@@ -48,6 +48,35 @@ A real-time collaborative Pomodoro timer desktop application built with Electron
    ```
    This will start both the WebSocket server and the Electron app.
 
+## Building for Distribution
+
+### Windows
+For detailed Windows build instructions, see [WINDOWS_BUILD_GUIDE.md](WINDOWS_BUILD_GUIDE.md).
+
+Quick build:
+```bash
+# Using the provided script
+build-windows.bat
+
+# Or using npm
+npm run build:win
+```
+
+### macOS
+```bash
+npm run build:mac
+```
+
+### Linux
+```bash
+npm run build:linux
+```
+
+### All Platforms
+```bash
+npm run build
+```
+
 4. **Or run components separately**
    ```bash
    # Terminal 1 - Start the server

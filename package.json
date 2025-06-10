@@ -8,7 +8,11 @@
     "server": "node server/server.js",
     "dev": "concurrently \"npm run server\" \"electron .\"",
     "build": "electron-builder",
-    "dist": "electron-builder --publish never"
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never"
   },
   "keywords": ["pomodoro", "timer", "collaboration", "electron"],
   "author": "Your Name",
@@ -30,13 +34,72 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "src/**/*",
+      "server/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!node_modules/*/{.babelrc,.jshintrc,.eslintrc,.eslintignore,.npmignore,.gitignore}"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "assets/icons/icon.icns"
+      "icon": "assets/icons/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
-      "target": "nsis",
-      "icon": "assets/icons/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        },
+        {
+          "target": "portable"
+        }
+      ],
+      "icon": "assets/icons/icon.ico",
+      "publisherName": "Your Company",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "assets/icons/icon.ico",
+      "uninstallerIcon": "assets/icons/icon.ico",
+      "installerHeader": "assets/icons/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Pomodoro Timer"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     },
     "linux": {
       "target": "AppImage",

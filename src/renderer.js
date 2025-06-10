@@ -7,6 +7,10 @@ let statistics = {};
 let sessionStartTime = null;
 let circularTimerCanvas = null;
 let circularTimerCtx = null;
+let connectionRetryCount = 0;
+let maxRetries = 5;
+let isReconnecting = false;
+let connectionStatus = 'disconnected'; // 'connected', 'connecting', 'disconnected', 'error'
 
 // DOM Elements
 const loginScreen = document.getElementById('loginScreen');
@@ -35,6 +39,50 @@ const statsBtn = document.getElementById('statsBtn');
 const statsModal = document.getElementById('statsModal');
 const closeStatsBtn = document.getElementById('closeStatsBtn');
 const resetStatsBtn = document.getElementById('resetStatsBtn');
+
+// Initialize socket connection with retry logic
+function initializeSocketConnection(port) {
+    updateConnectionStatus('connecting');
+    
+    socket = io(`http://localhost:${port}`, {
+        reconnection: true,
+        reconnectionAttempts: maxRetries,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 10000,
+        transports: ['websocket', 'polling']
+    });
+    
+    setupSocketListeners();
+}
+
+// Update connection status and UI
+function updateConnectionStatus(status) {
+    connectionStatus = status;
+    
+    // Update UI based on connection status
+    const statusIndicator = document.getElementById('connectionStatus');
+    if (statusIndicator) {
+        switch (status) {
+            case 'connected':
+                statusIndicator.textContent = 'Connected';
+                statusIndicator.className = 'connection-status connected';
+                break;
+            case 'connecting':
+                statusIndicator.textContent = 'Connecting...';
+                statusIndicator.className = 'connection-status connecting';
+                break;
+            case 'disconnected':
+                statusIndicator.textContent = 'Disconnected';
+                statusIndicator.className = 'connection-status disconnected';
+                break;
+            case 'error':
+                statusIndicator.textContent = 'Connection Error';
+                statusIndicator.className = 'connection-status error';
+                break;
+        }
+    }
+}
 
 // Initialize
 async function init() {
@@ -66,9 +114,8 @@ async function init() {
         console.log('Using default port:', serverPort);
     }
     
-    // Connect to server
-    socket = io(`http://localhost:${serverPort}`);
-    setupSocketListeners();
+    // Initialize socket connection with retry logic
+    initializeSocketConnection(serverPort);
     
     // Setup event listeners
     setupEventListeners();
@@ -78,12 +125,88 @@ async function init() {
 function setupSocketListeners() {
     socket.on('connect', () => {
         console.log('Connected to server');
+        updateConnectionStatus('connected');
+        connectionRetryCount = 0;
+        
+        // If we have a current session, try to reconnect
+        if (currentSession && currentUser && !isReconnecting) {
+            isReconnecting = true;
+            socket.emit('reconnectSession', {
+                sessionId: currentSession.sessionId,
+                userId: currentUser.id,
+                username: currentUser.username
+            }, (response) => {
+                isReconnecting = false;
+                if (response.success) {
+                    console.log('Successfully reconnected to session');
+                    currentSession = response;
+                    isHost = response.isHost;
+                    updateTimerDisplay(response.session.timer);
+                    updateUsersList(response.session.users);
+                    if (isHost) {
+                        showHostControls();
+                    }
+                } else {
+                    console.error('Failed to reconnect:', response.error);
+                    showLoginScreen();
+                    showError('Session no longer exists. Please create or join a new session.');
+                }
+            });
+        }
     });
     
-    socket.on('disconnect', () => {
-        console.log('Disconnected from server');
+    socket.on('disconnect', (reason) => {
+        console.log('Disconnected from server:', reason);
+        updateConnectionStatus('disconnected');
+        
+        if (reason === 'io server disconnect') {
+            // Server disconnected us
+            showError('Disconnected by server');
+        } else if (reason === 'ping timeout') {
+            showError('Connection timeout - attempting to reconnect...');
+        } else if (reason === 'transport close' || reason === 'transport error') {
+            showError('Connection lost - attempting to reconnect...');
+        }
+        
+        // Don't immediately go to login screen if we might reconnect
+        if (!['io server disconnect', 'io client disconnect'].includes(reason) && currentSession) {
+            setTimeout(() => {
+                if (connectionStatus === 'disconnected') {
+                    showLoginScreen();
+                    showError('Unable to reconnect. Please rejoin the session.');
+                }
+            }, 10000); // Give 10 seconds to reconnect
+        }
+    });
+    
+    socket.on('connect_error', (error) => {
+        console.error('Connection error:', error.message);
+        updateConnectionStatus('error');
+        connectionRetryCount++;
+        
+        if (connectionRetryCount >= maxRetries) {
+            showError('Unable to connect to server. Please check if the server is running.');
+            updateConnectionStatus('error');
+        } else {
+            showError(`Connection failed. Retrying... (${connectionRetryCount}/${maxRetries})`);
+        }
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+        console.log('Reconnected after', attemptNumber, 'attempts');
+        updateConnectionStatus('connected');
+    });
+    
+    socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log('Reconnection attempt', attemptNumber);
+        updateConnectionStatus('connecting');
+    });
+    
+    socket.on('reconnect_failed', () => {
+        console.error('Failed to reconnect');
+        updateConnectionStatus('error');
         showLoginScreen();
-        showError('Connection lost. Please rejoin the session.');
+        showError('Failed to reconnect to server. Please try again.');
     });
     
     socket.on('timerUpdate', (timer) => {
@@ -188,9 +311,22 @@ async function createSession() {
         return;
     }
     
+    if (connectionStatus !== 'connected') {
+        showError('Not connected to server. Please wait...');
+        return;
+    }
+    
     clearError();
+    
+    // Add timeout for session creation
+    const timeoutId = setTimeout(() => {
+        showError('Session creation timed out. Please try again.');
+    }, 5000);
+    
     socket.emit('createSession', username, async (response) => {
-        if (response.success) {
+        clearTimeout(timeoutId);
+        
+        if (response && response.success) {
             currentSession = response;
             currentUser = { id: response.userId, username };
             isHost = true;
@@ -200,7 +336,7 @@ async function createSession() {
             showTimerScreen();
             showHostControls();
         } else {
-            showError('Failed to create session');
+            showError(response?.error || 'Failed to create session');
         }
     });
 }
@@ -219,9 +355,22 @@ async function joinSession() {
         return;
     }
     
+    if (connectionStatus !== 'connected') {
+        showError('Not connected to server. Please wait...');
+        return;
+    }
+    
     clearError();
+    
+    // Add timeout for joining session
+    const timeoutId = setTimeout(() => {
+        showError('Join session timed out. Please try again.');
+    }, 5000);
+    
     socket.emit('joinSession', sessionCode, username, async (response) => {
-        if (response.success) {
+        clearTimeout(timeoutId);
+        
+        if (response && response.success) {
             currentSession = response;
             currentUser = { id: response.userId, username };
             isHost = response.isHost;
@@ -233,7 +382,7 @@ async function joinSession() {
                 showHostControls();
             }
         } else {
-            showError(response.error || 'Failed to join session');
+            showError(response?.error || 'Failed to join session');
         }
     });
 }
@@ -321,7 +470,9 @@ function drawCircularTimer(timer) {
     
     // Calculate progress (remaining time ratio)
     const progress = timer.remaining / timer.duration;
-    const endAngle = -Math.PI / 2 + (progress * 2 * Math.PI);
+    // For clockwise countdown: start at top and go clockwise
+    const startAngle = -Math.PI / 2; // Top of circle (12 o'clock)
+    const endAngle = startAngle + (1 - progress) * 2 * Math.PI; // Clockwise from top
     
     // Draw background circle
     circularTimerCtx.beginPath();
@@ -330,10 +481,11 @@ function drawCircularTimer(timer) {
     circularTimerCtx.lineWidth = lineWidth;
     circularTimerCtx.stroke();
     
-    // Draw progress arc (starts full and decreases)
+    // Draw progress arc (starts full and decreases clockwise)
     if (progress > 0) {
         circularTimerCtx.beginPath();
-        circularTimerCtx.arc(centerX, centerY, radius, -Math.PI / 2, endAngle);
+        // Draw from the elapsed position back to start (creates remaining time arc)
+        circularTimerCtx.arc(centerX, centerY, radius, endAngle, startAngle + 2 * Math.PI);
         circularTimerCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary-color');
         circularTimerCtx.lineWidth = lineWidth;
         circularTimerCtx.lineCap = 'round';
